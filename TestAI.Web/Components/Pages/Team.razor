@@ -1,0 +1,200 @@
+@page "/team"
+@using TestAI.Web.Models
+@using TestAI.Web.Services
+@inject IProjectService ProjectService
+@rendermode InteractiveServer
+
+<PageTitle>Team</PageTitle>
+
+<h1>Team Members</h1>
+<p class="lead">View team members and their workload across projects.</p>
+
+@if (_teamMembers == null)
+{
+    <p><em>Loading team data...</em></p>
+}
+else
+{
+    <div class="row">
+        @foreach (var member in _teamMembers)
+        {
+            var workload = CalculateMemberWorkload(member);
+            var taskCount = GetAssignedTaskCount(member);
+
+            <div class="col-md-6 col-lg-4 mb-4">
+                <div class="card h-100">
+                    <div class="card-header">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0">@member.FullName</h5>
+                            <span class="badge @GetRoleBadgeClass(member.Role)">@member.Role</span>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <p class="text-muted mb-3">@member.Email</p>
+
+                        <h6>Skills</h6>
+                        <div class="mb-3">
+                            @foreach (var skill in member.Skills)
+                            {
+                                <span class="badge bg-light text-dark me-1 mb-1">@skill</span>
+                            }
+                        </div>
+
+                        <h6>Workload</h6>
+                        <div class="progress mb-2" style="height: 20px;">
+                            @{
+                                var workloadPercentage = Math.Min((double)workload / member.MaxHoursPerWeek * 100, 100);
+                            }
+                            <div class="progress-bar @GetWorkloadBarClass(workloadPercentage)"
+                                 role="progressbar"
+                                 style="width: @workloadPercentage%"
+                                 aria-valuenow="@workloadPercentage"
+                                 aria-valuemin="0"
+                                 aria-valuemax="100">
+                                @workload / @member.MaxHoursPerWeek h
+                            </div>
+                        </div>
+                        <small class="text-muted">
+                            @if (workloadPercentage > 100)
+                            {
+                                <span class="text-danger">Over capacity!</span>
+                            }
+                            else if (workloadPercentage > 80)
+                            {
+                                <span class="text-warning">Near capacity</span>
+                            }
+                            else
+                            {
+                                <span class="text-success">@((member.MaxHoursPerWeek - workload)) hours available</span>
+                            }
+                        </small>
+
+                        <hr />
+
+                        <div class="row text-center">
+                            <div class="col">
+                                <h4 class="mb-0">@taskCount</h4>
+                                <small class="text-muted">Assigned Tasks</small>
+                            </div>
+                            <div class="col">
+                                <h4 class="mb-0">@GetProjectCount(member)</h4>
+                                <small class="text-muted">Projects</small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card-footer text-muted">
+                        <small>Joined @member.JoinedAt.ToString("MMM yyyy")</small>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+
+    <h2 class="mt-5 mb-4">Team Statistics</h2>
+    <div class="row">
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h3 class="text-primary">@_teamMembers.Count()</h3>
+                    <p class="text-muted mb-0">Total Members</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h3 class="text-success">@GetTotalCompletedTasks()</h3>
+                    <p class="text-muted mb-0">Tasks Completed</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h3 class="text-info">@_projects.Count()</h3>
+                    <p class="text-muted mb-0">Active Projects</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h3 class="text-warning">@GetAverageWorkload().ToString("F0")%</h3>
+                    <p class="text-muted mb-0">Avg. Capacity Used</p>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<TeamMember>? _teamMembers;
+    private IEnumerable<Project> _projects = Enumerable.Empty<Project>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _projects = await ProjectService.GetAllProjectsAsync();
+
+        // Collect unique team members across all projects
+        _teamMembers = _projects
+            .SelectMany(p => p.TeamMembers)
+            .DistinctBy(m => m.Id)
+            .ToList();
+    }
+
+    private int CalculateMemberWorkload(TeamMember member)
+    {
+        return _projects
+            .SelectMany(p => p.Tasks)
+            .Where(t => t.AssigneeId == member.Id && t.Status != WorkItemStatus.Completed)
+            .Sum(t => t.EstimatedHours);
+    }
+
+    private int GetAssignedTaskCount(TeamMember member)
+    {
+        return _projects
+            .SelectMany(p => p.Tasks)
+            .Count(t => t.AssigneeId == member.Id && t.Status != WorkItemStatus.Completed);
+    }
+
+    private int GetProjectCount(TeamMember member)
+    {
+        return _projects.Count(p => p.TeamMembers.Any(m => m.Id == member.Id));
+    }
+
+    private int GetTotalCompletedTasks()
+    {
+        return _projects.SelectMany(p => p.Tasks).Count(t => t.Status == WorkItemStatus.Completed);
+    }
+
+    private double GetAverageWorkload()
+    {
+        if (_teamMembers == null || !_teamMembers.Any()) return 0;
+
+        return _teamMembers.Average(m =>
+        {
+            var workload = CalculateMemberWorkload(m);
+            return (double)workload / m.MaxHoursPerWeek * 100;
+        });
+    }
+
+    private string GetRoleBadgeClass(TeamRole role) => role switch
+    {
+        TeamRole.TechLead => "bg-danger",
+        TeamRole.SeniorDeveloper => "bg-warning text-dark",
+        TeamRole.Developer => "bg-primary",
+        TeamRole.ProjectManager => "bg-success",
+        TeamRole.Designer => "bg-info",
+        TeamRole.QAEngineer => "bg-secondary",
+        TeamRole.DevOps => "bg-dark",
+        _ => "bg-secondary"
+    };
+
+    private string GetWorkloadBarClass(double percentage) => percentage switch
+    {
+        > 100 => "bg-danger",
+        > 80 => "bg-warning",
+        > 50 => "bg-info",
+        _ => "bg-success"
+    };
+}

@@ -1,0 +1,180 @@
+@page "/"
+@using TestAI.Web.Models
+@using TestAI.Web.Services
+@inject IProjectService ProjectService
+@rendermode InteractiveServer
+
+<PageTitle>Dashboard</PageTitle>
+
+<h1>Project Dashboard</h1>
+<p class="lead">Welcome to TestAI Project Manager - your agile project management solution.</p>
+
+@if (_projects == null)
+{
+    <p><em>Loading dashboard...</em></p>
+}
+else
+{
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card text-white bg-primary">
+                <div class="card-body text-center">
+                    <h2>@_projects.Count()</h2>
+                    <p class="mb-0">Total Projects</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-white bg-success">
+                <div class="card-body text-center">
+                    <h2>@_projects.Count(p => p.Status == ProjectStatus.InProgress)</h2>
+                    <p class="mb-0">In Progress</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-white bg-info">
+                <div class="card-body text-center">
+                    <h2>@_totalTasks</h2>
+                    <p class="mb-0">Total Tasks</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-white bg-warning">
+                <div class="card-body text-center">
+                    <h2>@_overdueTasks</h2>
+                    <p class="mb-0">Overdue Tasks</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Active Projects</h5>
+                </div>
+                <div class="card-body">
+                    @foreach (var project in _projects.Where(p => p.Status == ProjectStatus.InProgress))
+                    {
+                        <div class="mb-4">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <h6 class="mb-0">
+                                    <a href="/projects/@project.Id">@project.Name</a>
+                                </h6>
+                                <span class="badge @(project.IsAtRisk ? "bg-danger" : "bg-primary")">
+                                    @project.CompletionPercentage.ToString("F0")% Complete
+                                </span>
+                            </div>
+                            <div class="progress" style="height: 8px;">
+                                <div class="progress-bar" role="progressbar"
+                                     style="width: @project.CompletionPercentage%">
+                                </div>
+                            </div>
+                            <small class="text-muted">
+                                @project.Tasks.Count(t => t.Status == WorkItemStatus.Completed) of @project.Tasks.Count tasks completed
+                                @if (project.DueDate.HasValue)
+                                {
+                                    <span> | Due: @project.DueDate.Value.ToString("MMM dd")</span>
+                                }
+                            </small>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-4">
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0">Quick Stats</h5>
+                </div>
+                <ul class="list-group list-group-flush">
+                    <li class="list-group-item d-flex justify-content-between">
+                        <span>Completed Tasks</span>
+                        <strong class="text-success">@_completedTasks</strong>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between">
+                        <span>In Progress</span>
+                        <strong class="text-primary">@_inProgressTasks</strong>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between">
+                        <span>In Review</span>
+                        <strong class="text-warning">@_inReviewTasks</strong>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between">
+                        <span>Team Members</span>
+                        <strong>@_teamMemberCount</strong>
+                    </li>
+                </ul>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Tasks Needing Attention</h5>
+                </div>
+                <ul class="list-group list-group-flush">
+                    @foreach (var task in _urgentTasks.Take(5))
+                    {
+                        <li class="list-group-item">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div>
+                                    <strong>@task.Title</strong>
+                                    @if (task.IsOverdue)
+                                    {
+                                        <span class="badge bg-danger ms-1">Overdue</span>
+                                    }
+                                </div>
+                                <span class="badge @GetPriorityClass(task.Priority)">
+                                    @task.Priority
+                                </span>
+                            </div>
+                        </li>
+                    }
+                </ul>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private IEnumerable<Project>? _projects;
+    private int _totalTasks;
+    private int _completedTasks;
+    private int _inProgressTasks;
+    private int _inReviewTasks;
+    private int _overdueTasks;
+    private int _teamMemberCount;
+    private IEnumerable<ProjectTask> _urgentTasks = Enumerable.Empty<ProjectTask>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _projects = await ProjectService.GetAllProjectsAsync();
+
+        if (_projects != null)
+        {
+            var allTasks = _projects.SelectMany(p => p.Tasks).ToList();
+            _totalTasks = allTasks.Count;
+            _completedTasks = allTasks.Count(t => t.Status == WorkItemStatus.Completed);
+            _inProgressTasks = allTasks.Count(t => t.Status == WorkItemStatus.InProgress);
+            _inReviewTasks = allTasks.Count(t => t.Status == WorkItemStatus.InReview);
+            _overdueTasks = allTasks.Count(t => t.IsOverdue);
+            _teamMemberCount = _projects.SelectMany(p => p.TeamMembers).DistinctBy(m => m.Id).Count();
+
+            _urgentTasks = allTasks
+                .Where(t => t.IsOverdue || t.Priority == TaskPriority.Critical)
+                .OrderByDescending(t => t.Priority)
+                .ThenBy(t => t.DueDate);
+        }
+    }
+
+    private string GetPriorityClass(TaskPriority priority) => priority switch
+    {
+        TaskPriority.Critical => "bg-danger",
+        TaskPriority.High => "bg-warning text-dark",
+        TaskPriority.Medium => "bg-info",
+        _ => "bg-secondary"
+    };
+}

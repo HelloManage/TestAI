@@ -1,0 +1,241 @@
+@page "/projects/{ProjectId:guid}/tasks"
+@using TestAI.Web.Models
+@using TestAI.Web.Services
+@inject IProjectService ProjectService
+@inject ITaskService TaskService
+@rendermode InteractiveServer
+
+<PageTitle>Tasks - @(_project?.Name ?? "Project")</PageTitle>
+
+@if (_project == null)
+{
+    <p><em>Loading...</em></p>
+}
+else
+{
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="/projects">Projects</a></li>
+            <li class="breadcrumb-item"><a href="/projects/@_project.Id">@_project.Name</a></li>
+            <li class="breadcrumb-item active" aria-current="page">Tasks</li>
+        </ol>
+    </nav>
+
+    <h1>Tasks</h1>
+    <p class="lead">Manage tasks for @_project.Name</p>
+
+    <div class="row mb-4">
+        <div class="col">
+            <div class="btn-group" role="group">
+                <button class="btn @(_selectedFilter == null ? "btn-primary" : "btn-outline-primary")"
+                        @onclick="() => FilterTasks(null)">
+                    All (@_tasks.Count())
+                </button>
+                @foreach (WorkItemStatus status in Enum.GetValues<WorkItemStatus>())
+                {
+                    var count = _tasks.Count(t => t.Status == status);
+                    <button class="btn @(_selectedFilter == status ? "btn-primary" : "btn-outline-primary")"
+                            @onclick="() => FilterTasks(status)">
+                        @status (@count)
+                    </button>
+                }
+            </div>
+        </div>
+    </div>
+
+    @if (_filteredTasks.Any(t => t.IsOverdue))
+    {
+        <div class="alert alert-danger mb-4">
+            <strong>Attention:</strong> @_filteredTasks.Count(t => t.IsOverdue) task(s) are overdue!
+        </div>
+    }
+
+    <div class="row">
+        @foreach (var task in _filteredTasks)
+        {
+            <div class="col-md-6 col-lg-4 mb-4">
+                <div class="card h-100 @(task.IsOverdue ? "border-danger" : "")">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <span class="badge @GetPriorityBadgeClass(task.Priority)">
+                            @task.Priority
+                        </span>
+                        <span class="badge @GetStatusBadgeClass(task.Status)">
+                            @task.Status
+                        </span>
+                    </div>
+                    <div class="card-body">
+                        <h5 class="card-title">@task.Title</h5>
+                        <p class="card-text text-muted">@task.Description</p>
+
+                        @if (task.Tags.Any())
+                        {
+                            <div class="mb-3">
+                                @foreach (var tag in task.Tags)
+                                {
+                                    <span class="badge bg-light text-dark me-1">@tag</span>
+                                }
+                            </div>
+                        }
+
+                        <div class="row text-center mb-3">
+                            <div class="col">
+                                <small class="text-muted">Estimated</small>
+                                <br />
+                                <strong>@task.EstimatedHours h</strong>
+                            </div>
+                            <div class="col">
+                                <small class="text-muted">Actual</small>
+                                <br />
+                                <strong>@task.ActualHours h</strong>
+                            </div>
+                            <div class="col">
+                                <small class="text-muted">Variance</small>
+                                <br />
+                                <strong class="@(task.HoursVariance < 0 ? "text-danger" : "text-success")">
+                                    @(task.HoursVariance > 0 ? "+" : "")@task.HoursVariance h
+                                </strong>
+                            </div>
+                        </div>
+
+                        @if (task.Assignee != null)
+                        {
+                            <p class="mb-1">
+                                <small><strong>Assigned to:</strong> @task.Assignee.FullName</small>
+                            </p>
+                        }
+
+                        @if (task.DueDate.HasValue)
+                        {
+                            <p class="mb-0">
+                                <small class="@(task.IsOverdue ? "text-danger" : "text-muted")">
+                                    <strong>Due:</strong> @task.DueDate.Value.ToString("MMM dd, yyyy")
+                                    @if (task.IsOverdue)
+                                    {
+                                        <span>(OVERDUE)</span>
+                                    }
+                                </small>
+                            </p>
+                        }
+                    </div>
+                    <div class="card-footer">
+                        <div class="btn-group btn-group-sm w-100">
+                            @if (task.Status != WorkItemStatus.Completed)
+                            {
+                                @if (task.Status == WorkItemStatus.Backlog)
+                                {
+                                    <button class="btn btn-outline-primary"
+                                            @onclick="() => TransitionTask(task.Id, WorkItemStatus.Todo)">
+                                        Move to Todo
+                                    </button>
+                                }
+                                @if (task.Status == WorkItemStatus.Todo)
+                                {
+                                    <button class="btn btn-outline-primary"
+                                            @onclick="() => TransitionTask(task.Id, WorkItemStatus.InProgress)">
+                                        Start
+                                    </button>
+                                }
+                                @if (task.Status == WorkItemStatus.InProgress)
+                                {
+                                    <button class="btn btn-outline-warning"
+                                            @onclick="() => TransitionTask(task.Id, WorkItemStatus.InReview)">
+                                        Submit for Review
+                                    </button>
+                                }
+                                @if (task.Status == WorkItemStatus.InReview)
+                                {
+                                    <button class="btn btn-outline-success"
+                                            @onclick="() => TransitionTask(task.Id, WorkItemStatus.Completed)">
+                                        Complete
+                                    </button>
+                                }
+                            }
+                            else
+                            {
+                                <button class="btn btn-outline-secondary"
+                                        @onclick="() => TransitionTask(task.Id, WorkItemStatus.InProgress)">
+                                    Reopen
+                                </button>
+                            }
+                            <button class="btn btn-outline-info" @onclick="() => LogHours(task.Id)">
+                                Log Hours
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+
+    @if (!_filteredTasks.Any())
+    {
+        <div class="alert alert-info">
+            No tasks found matching the selected filter.
+        </div>
+    }
+}
+
+@code {
+    [Parameter]
+    public Guid ProjectId { get; set; }
+
+    private Project? _project;
+    private IEnumerable<ProjectTask> _tasks = Enumerable.Empty<ProjectTask>();
+    private IEnumerable<ProjectTask> _filteredTasks = Enumerable.Empty<ProjectTask>();
+    private WorkItemStatus? _selectedFilter;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _project = await ProjectService.GetProjectByIdAsync(ProjectId);
+        if (_project != null)
+        {
+            _tasks = _project.Tasks;
+            _filteredTasks = _tasks;
+        }
+    }
+
+    private void FilterTasks(WorkItemStatus? status)
+    {
+        _selectedFilter = status;
+        _filteredTasks = status.HasValue
+            ? _tasks.Where(t => t.Status == status.Value)
+            : _tasks;
+    }
+
+    private async Task TransitionTask(Guid taskId, WorkItemStatus newStatus)
+    {
+        var result = await TaskService.TransitionTaskStatusAsync(taskId, newStatus);
+        if (!result.Success)
+        {
+            // In a real app, show an error message
+            Console.WriteLine($"Transition failed: {result.ErrorMessage}");
+        }
+        StateHasChanged();
+    }
+
+    private async Task LogHours(Guid taskId)
+    {
+        // Simplified - in real app, show a modal
+        await TaskService.LogHoursAsync(taskId, 1);
+        StateHasChanged();
+    }
+
+    private string GetStatusBadgeClass(WorkItemStatus status) => status switch
+    {
+        WorkItemStatus.Backlog => "bg-secondary",
+        WorkItemStatus.Todo => "bg-info",
+        WorkItemStatus.InProgress => "bg-primary",
+        WorkItemStatus.InReview => "bg-warning text-dark",
+        WorkItemStatus.Completed => "bg-success",
+        _ => "bg-secondary"
+    };
+
+    private string GetPriorityBadgeClass(TaskPriority priority) => priority switch
+    {
+        TaskPriority.Critical => "bg-danger",
+        TaskPriority.High => "bg-warning text-dark",
+        TaskPriority.Medium => "bg-info",
+        TaskPriority.Low => "bg-secondary",
+        _ => "bg-secondary"
+    };
+}
