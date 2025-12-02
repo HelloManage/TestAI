@@ -17,9 +17,24 @@ The PM has requested documentation for: "{{ARGS}}"
 
 Guide the Product Manager through generating business documentation in French, based on the codebase. This documentation will be added to the GitHub Wiki as a `Business-*` page (not synced to repo).
 
-## Language
+## Language & Style
 
-**IMPORTANT:** All generated documentation content must be written in **French**.
+**CRITICAL REQUIREMENTS:**
+
+1. **All documentation must be in French**
+
+2. **ZERO technical language** - Write for someone with NO technical background:
+   - ❌ Never use: API, base de données, backend, frontend, endpoint, requête, modèle, service, composant, instance, classe, méthode, fonction, variable, paramètre, JSON, HTTP, authentification, token, cache, async, synchrone, déploiement, serveur, client, framework, librairie, module, dépendance, architecture, refactoring, bug, debug, log, exception, erreur technique
+   - ✅ Use instead: l'application, le système, les données, l'écran, la page, le bouton, l'utilisateur, l'action, le résultat, la liste, le formulaire, la notification, le message, la validation
+
+3. **Explain like talking to a 10-year-old** - If a concept seems complex, use analogies from everyday life
+
+4. **Focus on WHAT and WHY, never HOW (technically)**:
+   - ✅ "L'utilisateur peut voir la liste de ses projets"
+   - ❌ "Le composant ProjectList fait un appel au ProjectService"
+
+5. **Use concrete examples** - Instead of abstract descriptions, show real scenarios
+
 Communication with the PM can be in English or French based on their preference.
 
 ---
@@ -119,9 +134,10 @@ Based on your analysis, generate comprehensive business documentation **in Frenc
 2. [Étape 2]
 3. [Étape 3]
 
-## Données impliquées
+## Informations gérées
 
-[Description des entités et données métier concernées - sans détails techniques]
+[Quelles informations l'utilisateur peut voir, créer ou modifier - en termes simples]
+[Exemple: "Le système garde en mémoire le nom du projet, sa date de début, et qui travaille dessus"]
 
 ## Cas d'utilisation
 
@@ -268,11 +284,15 @@ rm -rf "%TEMP%\wiki-temp"
 ## Important Rules
 
 - ✅ **All documentation content in French**
-- ✅ **Business perspective only** - No technical implementation details
+- ✅ **ABSOLUTELY NO technical jargon** - Write for a non-technical person
+- ✅ **Use simple words and short sentences**
+- ✅ **Explain with real-life analogies** when concepts are abstract
+- ✅ **Business perspective only** - Focus on user actions and business value
 - ✅ **PM approval required** before publishing
 - ✅ **Use `Business-` prefix** for wiki page names
-- ✅ **Analyze codebase** to ensure accuracy
+- ✅ **Analyze codebase** to ensure accuracy, but translate findings into plain language
 - ❌ **No code snippets** in business documentation
+- ❌ **No technical terms** - If you catch yourself writing one, replace it immediately
 - ❌ **No git operations on main repo** - Wiki only
 
 ---
