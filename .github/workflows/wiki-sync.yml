@@ -120,13 +120,15 @@ jobs:
           mkdir -p docs
           cp wiki/*.md docs/ 2>/dev/null || echo "No markdown files in wiki"
 
-          # Check if there are changes
-          if git diff --quiet && git diff --cached --quiet; then
+          # Stage changes first (needed to detect new files)
+          git add docs/
+
+          # Check if there are staged changes
+          if git diff --cached --quiet; then
             echo "No changes to sync"
             exit 0
           fi
 
           # Commit and push
-          git add docs/
-          git commit -m "Sync from wiki [skip ci]" || echo "Nothing to commit"
+          git commit -m "Sync from wiki [skip ci]"
           git push
