@@ -1,8 +1,9 @@
 ---
-allowed-tools: Read, Glob, Grep, Task(Explore:*), AskUserQuestion, Bash(gh:*)
+allowed-tools: Read, Glob, Grep, Task(Explore:*), AskUserQuestion, Bash(gh:*), Bash(git pull:*), Bash(git status:*)
 argument-hint: <concept or feature to document>
 description: Generate business documentation in French for the wiki (PM workflow)
 model: opus
+context: .claude/context/pm-workflow.md
 ---
 
 # Business Documentation Generator (PM Workflow)
@@ -36,6 +37,22 @@ Guide the Product Manager through generating business documentation in French, b
 5. **Use concrete examples** - Instead of abstract descriptions, show real scenarios
 
 Communication with the PM can be in English or French based on their preference.
+
+---
+
+## Phase 0: Pre-requisites (ALWAYS FIRST)
+
+**Before doing anything else, execute these commands:**
+
+```bash
+git pull
+git status
+```
+
+- If `git pull` fails or shows conflicts → STOP and ask the PM to contact a developer
+- If `git status` shows uncommitted changes → Warn the PM but continue (these are likely from another developer)
+
+Only proceed to Phase 1 after successful git pull.
 
 ---
 
