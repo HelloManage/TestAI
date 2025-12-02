@@ -1,0 +1,122 @@
+name: Bidirectional Wiki Sync
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'docs/**'
+  gollum:
+  workflow_dispatch:
+    inputs:
+      direction:
+        description: 'Sync direction'
+        required: true
+        default: 'auto'
+        type: choice
+        options:
+          - auto
+          - docs-to-wiki
+          - wiki-to-docs
+
+permissions:
+  contents: write
+
+jobs:
+  sync-docs-to-wiki:
+    name: Sync docs to Wiki
+    runs-on: ubuntu-latest
+    if: |
+      github.event_name == 'push' ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.direction != 'wiki-to-docs')
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Checkout wiki
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository }}.wiki
+          path: wiki
+          token: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+
+      - name: Initialize wiki if needed
+        run: |
+          if [ ! -d "wiki/.git" ]; then
+            echo "Wiki does not exist yet. Creating initial wiki..."
+            mkdir -p wiki
+            cd wiki
+            git init
+            git remote add origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.wiki.git
+          fi
+
+      - name: Sync docs to wiki
+        run: |
+          # Configure git
+          cd wiki
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Remove old wiki files (except .git)
+          find . -maxdepth 1 -type f -name "*.md" -delete
+
+          # Copy docs to wiki
+          cp -r ../docs/* .
+
+          # Check if there are changes
+          if git diff --quiet && git diff --cached --quiet; then
+            echo "No changes to sync"
+            exit 0
+          fi
+
+          # Commit and push
+          git add -A
+          git commit -m "Sync from docs folder [skip ci]" || echo "Nothing to commit"
+          git push origin HEAD:master || git push origin HEAD:main || echo "Push failed - wiki may not be initialized"
+
+  sync-wiki-to-docs:
+    name: Sync Wiki to docs
+    runs-on: ubuntu-latest
+    if: |
+      github.event_name == 'gollum' ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.direction != 'docs-to-wiki')
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Checkout wiki
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository }}.wiki
+          path: wiki
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Sync wiki to docs
+        run: |
+          # Configure git
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Remove old docs (preserve folder)
+          find docs -maxdepth 1 -type f -name "*.md" -delete 2>/dev/null || true
+
+          # Copy wiki to docs
+          mkdir -p docs
+          cp wiki/*.md docs/ 2>/dev/null || echo "No markdown files in wiki"
+
+          # Check if there are changes
+          if git diff --quiet && git diff --cached --quiet; then
+            echo "No changes to sync"
+            exit 0
+          fi
+
+          # Commit and push
+          git add docs/
+          git commit -m "Sync from wiki [skip ci]" || echo "Nothing to commit"
+          git push
