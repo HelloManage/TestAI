@@ -10,6 +10,11 @@ name: Bidirectional Wiki Sync
 # 3. The workflow will use WIKI_PAT if available, otherwise falls back to GITHUB_TOKEN
 #
 # Alternative: Use workflow_dispatch to manually trigger wiki-to-docs sync
+#
+# Wiki Structure:
+# - Technical-*.md  → Synced to docs/ folder in repo (for developers)
+# - Business-*.md   → Wiki-only, NOT synced (for product managers)
+# - Home.md         → Wiki homepage, synced
 
 on:
   push:
@@ -70,20 +75,23 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          # Remove old wiki files (except .git)
-          find . -maxdepth 1 -type f -name "*.md" -delete
+          # Remove old Technical-* wiki files only (preserve Business-* pages)
+          find . -maxdepth 1 -type f -name "Technical-*.md" -delete
+          rm -f Home.md
 
-          # Copy docs to wiki
+          # Copy docs to wiki (these become Technical-* pages)
           cp -r ../docs/* .
 
+          # Stage changes
+          git add -A
+
           # Check if there are changes
-          if git diff --quiet && git diff --cached --quiet; then
+          if git diff --cached --quiet; then
             echo "No changes to sync"
             exit 0
           fi
 
           # Commit and push
-          git add -A
           git commit -m "Sync from docs folder [skip ci]" || echo "Nothing to commit"
           git push origin HEAD:master || git push origin HEAD:main || echo "Push failed - wiki may not be initialized"
 
@@ -116,9 +124,10 @@ jobs:
           # Remove old docs (preserve folder)
           find docs -maxdepth 1 -type f -name "*.md" -delete 2>/dev/null || true
 
-          # Copy wiki to docs
+          # Copy only Technical-* pages and Home.md to docs (exclude Business-* pages)
           mkdir -p docs
-          cp wiki/*.md docs/ 2>/dev/null || echo "No markdown files in wiki"
+          cp wiki/Home.md docs/ 2>/dev/null || echo "No Home.md in wiki"
+          cp wiki/Technical-*.md docs/ 2>/dev/null || echo "No Technical-* files in wiki"
 
           # Stage changes first (needed to detect new files)
           git add docs/
